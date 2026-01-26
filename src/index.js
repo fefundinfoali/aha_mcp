@@ -13,18 +13,17 @@ import { AuditLogger } from './audit-logger.js';
 import { preferences } from './preferences.js';
 
 // Get configuration from environment variables
-const AHA_COMPANY = process.env.AHA_COMPANY;
-const AHA_TOKEN = process.env.AHA_TOKEN;
+const AHA_COMPANY = process.env.AHA_COMPANY || 'fe-fundinfo';
 const AUDIT_LOG_PATH = process.env.AUDIT_LOG_PATH || null;
 const PORT = process.env.PORT || 3000;
 const TRANSPORT = process.env.TRANSPORT || 'sse';
 
-if (!AHA_COMPANY || !AHA_TOKEN) {
-  console.error('Error: AHA_COMPANY and AHA_TOKEN environment variables are required');
+if (!AHA_COMPANY) {
+  console.error('Error: AHA_COMPANY environment variable is required');
   process.exit(1);
 }
 
-const ahaClient = new AhaClient(AHA_COMPANY, AHA_TOKEN);
+// Don't create ahaClient here - we'll create per-request with user's token
 const auditLogger = new AuditLogger(AUDIT_LOG_PATH);
 
 console.error(`Audit log location: ${auditLogger.getLogFilePath()}`);
@@ -177,7 +176,7 @@ const TOOLS = [
 // ==========================================
 // HANDLE TOOL CALLS
 // ==========================================
-async function handleToolCall(name, args) {
+async function handleToolCall(name, args, ahaClient) {
   try {
     switch (name) {
       // ============ WORKFLOW TOOLS ============
@@ -1195,9 +1194,23 @@ async function startSSEServer() {
     });
   });
 
-  // SSE endpoint for MCP
+// SSE endpoint for MCP
   app.get('/sse', async (req, res) => {
-    console.error('SSE connection established');
+    // Get API token from header
+    const ahaToken = req.headers['x-aha-token'];
+    
+    if (!ahaToken) {
+      console.error('SSE connection rejected: No API token provided');
+      return res.status(401).json({ 
+        error: 'Missing X-Aha-Token header',
+        message: 'Please configure your API token in Claude Desktop config'
+      });
+    }
+    
+    console.error('SSE connection established with user token');
+    
+    // Create client with user's token
+    const userAhaClient = new AhaClient(AHA_COMPANY, ahaToken);
     
     const transport = new SSEServerTransport('/sse', res);
     const server = new Server(
@@ -1217,11 +1230,12 @@ async function startSSEServer() {
     });
     
     server.setRequestHandler(CallToolRequestSchema, async (request) => { 
-      return await handleToolCall(request.params.name, request.params.arguments || {}); 
+      // Pass the user's client to the handler
+      return await handleToolCall(request.params.name, request.params.arguments || {}, userAhaClient); 
     });
 
     await server.connect(transport);
-    console.error('MCP server connected via SSE');
+    console.error('MCP server connected via SSE for user');
   });
 
   app.listen(PORT, '0.0.0.0', () => {
