@@ -1,0 +1,21 @@
+{
+  "name": "aha-mcp-custom",
+  "version": "1.0.0",
+  "description": "Custom Aha MCP server with full CRUD capabilities",
+  "main": "src/index.js",
+  "type": "module",
+  "bin": {
+    "aha-mcp-custom": "./src/index.js"
+  },
+  "scripts": {
+    "start": "node src/index.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "author": "fe-fundinfo",
+  "license": "MIT"
+}

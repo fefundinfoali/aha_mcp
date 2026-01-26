@@ -1,0 +1,36 @@
+# Node
+node_modules/
+npm-debug.log
+yarn-error.log
+package-lock.json
+
+# Logs
+*.log
+logs/
+
+# Audit data
+.aha-mcp-audit/
+audit-log*.json
+
+# Environment variables
+.env
+.env.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Backups
+*.backup
+*.bak
+
+# Test files
+test-*.js
+*.test.js
