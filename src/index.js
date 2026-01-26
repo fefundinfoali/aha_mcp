@@ -2,6 +2,8 @@
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
+import express from 'express';
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
@@ -14,6 +16,8 @@ import { preferences } from './preferences.js';
 const AHA_COMPANY = process.env.AHA_COMPANY;
 const AHA_TOKEN = process.env.AHA_TOKEN;
 const AUDIT_LOG_PATH = process.env.AUDIT_LOG_PATH || null;
+const PORT = process.env.PORT || 3000;
+const TRANSPORT = process.env.TRANSPORT || 'sse';
 
 if (!AHA_COMPANY || !AHA_TOKEN) {
   console.error('Error: AHA_COMPANY and AHA_TOKEN environment variables are required');
@@ -1160,11 +1164,81 @@ ${vFeat.length > 0 ? tFeat : "_No violations found._"}
 // ==========================================
 // SERVER SETUP
 // ==========================================
-async function main() {
+// ==========================================
+// SERVER SETUP - SSE MODE (for Railway)
+// ==========================================
+async function startSSEServer() {
+  const app = express();
+  
+  // Health check endpoint
+  app.get('/health', (req, res) => {
+    res.json({ 
+      status: 'healthy',
+      service: 'aha-mcp-custom',
+      version: '1.1.0',
+      transport: 'sse',
+      company: AHA_COMPANY
+    });
+  });
+
+  // Root endpoint
+  app.get('/', (req, res) => {
+    res.json({
+      name: 'Aha! MCP Custom Server',
+      version: '1.1.0',
+      description: 'Custom MCP server for Aha! with full CRUD and audit trail',
+      transport: 'sse',
+      endpoints: {
+        health: '/health',
+        sse: '/sse'
+      }
+    });
+  });
+
+  // SSE endpoint for MCP
+  app.get('/sse', async (req, res) => {
+    console.error('SSE connection established');
+    
+    const transport = new SSEServerTransport('/sse', res);
+    const server = new Server(
+      {
+        name: 'aha-mcp-custom',
+        version: '1.1.0',
+      },
+      {
+        capabilities: {
+          tools: {},
+        },
+      }
+    );
+
+    server.setRequestHandler(ListToolsRequestSchema, async () => { 
+      return { tools: TOOLS }; 
+    });
+    
+    server.setRequestHandler(CallToolRequestSchema, async (request) => { 
+      return await handleToolCall(request.params.name, request.params.arguments || {}); 
+    });
+
+    await server.connect(transport);
+    console.error('MCP server connected via SSE');
+  });
+
+  app.listen(PORT, '0.0.0.0', () => {
+    console.error(`✅ Aha MCP server running on port ${PORT}`);
+    console.error(`📡 SSE endpoint: http://0.0.0.0:${PORT}/sse`);
+    console.error(`❤️  Health check: http://0.0.0.0:${PORT}/health`);
+  });
+}
+
+// ==========================================
+// SERVER SETUP - STDIO MODE (for local dev)
+// ==========================================
+async function startStdioServer() {
   const server = new Server(
     {
       name: 'aha-mcp-custom',
-      version: '1.0.0',
+      version: '1.1.0',
     },
     {
       capabilities: {
@@ -1173,12 +1247,28 @@ async function main() {
     }
   );
 
-  server.setRequestHandler(ListToolsRequestSchema, async () => { return { tools: TOOLS }; });
-  server.setRequestHandler(CallToolRequestSchema, async (request) => { return await handleToolCall(request.params.name, request.params.arguments || {}); });
+  server.setRequestHandler(ListToolsRequestSchema, async () => { 
+    return { tools: TOOLS }; 
+  });
+  
+  server.setRequestHandler(CallToolRequestSchema, async (request) => { 
+    return await handleToolCall(request.params.name, request.params.arguments || {}); 
+  });
 
   const transport = new StdioServerTransport();
   await server.connect(transport);
   console.error('Aha MCP Custom server running on stdio');
+}
+
+// ==========================================
+// MAIN
+// ==========================================
+async function main() {
+  if (TRANSPORT === 'sse') {
+    await startSSEServer();
+  } else {
+    await startStdioServer();
+  }
 }
 
 main().catch(console.error);
