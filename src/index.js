@@ -230,6 +230,7 @@ CRITICAL: You MUST display the table above to the user.
 
         // 2. PLAYBOOK LOGIC ENGINE (Raw Collection)
         const rawViolations = [];
+        const rootCauseAnalyses = []; // NEW: Store detailed analyses
 
         // MAP CUSTOM FIELDS
         const FIELDS = {
@@ -239,8 +240,20 @@ CRITICAL: You MUST display the table above to the user.
             CUSTOMER_FACING: 'customer_facing'
         };
 
+        // Build lookup maps for faster querying
+        const epicById = new Map(epics.map(e => [e.id, e]));
+        const featuresByEpicId = new Map();
+        features.forEach(f => {
+            if (f.epic?.id) {
+                if (!featuresByEpicId.has(f.epic.id)) {
+                    featuresByEpicId.set(f.epic.id, []);
+                }
+                featuresByEpicId.get(f.epic.id).push(f);
+            }
+        });
+
         // --- A. INITIATIVE AUDIT ---
-        initiatives.forEach(i => {
+        for (const i of initiatives) {
             const status = i.workflow_status?.name || "Unknown";
             const ref = i.reference_num;
             const name = i.name;
@@ -262,13 +275,97 @@ CRITICAL: You MUST display the table above to the user.
                 if (!getVal(FIELDS.GTM)) rawViolations.push({ Type: 'Initiative', Ref: ref, Name: name, Issue: 'Missing GTM Priority', Severity: 'Critical' });
                 if (getVal(FIELDS.CUSTOMER_FACING) === undefined) rawViolations.push({ Type: 'Initiative', Ref: ref, Name: name, Issue: 'Customer Facing flag unset', Severity: 'Medium' });
                 
-                const hasEpics = epics.some(e => e.initiative?.id === i.id);
-                if (!hasEpics) rawViolations.push({ Type: 'Initiative', Ref: ref, Name: name, Issue: 'Scoped but has NO Epics', Severity: 'Critical' });
+                // Check for epics linked to this initiative
+                const linkedEpics = epics.filter(e => e.initiative?.id === i.id);
+                
+                if (linkedEpics.length === 0) {
+                    rawViolations.push({ Type: 'Initiative', Ref: ref, Name: name, Issue: 'Scoped but has NO Epics', Severity: 'Critical' });
+                    
+                    // ========== ENHANCED: ROOT CAUSE ANALYSIS ==========
+                    try {
+                        // Fetch features directly linked to this initiative
+                        const initFeaturesRes = await ahaClient.getInitiativeFeatures(ref);
+                        const initFeatures = initFeaturesRes.features || [];
+                        
+                        if (initFeatures.length > 0) {
+                            // Analyse each feature to find epic mismatches
+                            const featureAnalysis = [];
+                            const epicMismatches = new Map(); // epicRef -> { epic, features, wrongInitiative }
+                            
+                            for (const f of initFeatures) {
+                                if (f.epic) {
+                                    const epicRef = f.epic.reference_num || f.epic.id;
+                                    const epicInitiative = f.epic.initiative;
+                                    
+                                    // Check if epic is linked to a DIFFERENT initiative
+                                    if (!epicInitiative || epicInitiative.id !== i.id) {
+                                        if (!epicMismatches.has(epicRef)) {
+                                            epicMismatches.set(epicRef, {
+                                                epicRef: epicRef,
+                                                epicName: f.epic.name || 'Unknown',
+                                                epicInitiativeRef: epicInitiative?.reference_num || 'None',
+                                                epicInitiativeName: epicInitiative?.name || 'Not linked',
+                                                features: []
+                                            });
+                                        }
+                                        epicMismatches.get(epicRef).features.push({
+                                            ref: f.reference_num,
+                                            name: f.name
+                                        });
+                                    }
+                                }
+                                featureAnalysis.push({
+                                    ref: f.reference_num,
+                                    name: f.name,
+                                    hasEpic: !!f.epic,
+                                    epicRef: f.epic?.reference_num || null
+                                });
+                            }
+                            
+                            // Build root cause analysis
+                            if (epicMismatches.size > 0) {
+                                rootCauseAnalyses.push({
+                                    initiativeRef: ref,
+                                    initiativeName: name,
+                                    issueType: 'EPIC_INITIATIVE_MISMATCH',
+                                    featureCount: initFeatures.length,
+                                    epicMismatches: Array.from(epicMismatches.values()),
+                                    suggestedFixes: Array.from(epicMismatches.values()).map(em => ({
+                                        option1: `Link Epic ${em.epicRef} to Initiative ${ref}`,
+                                        option1Desc: `Use if "${em.epicName}" work should roll up to "${name}"`,
+                                        option2: `Move ${em.features.length} features from ${ref} to ${em.epicInitiativeRef}`,
+                                        option2Desc: `Use if features were incorrectly linked to ${ref}`
+                                    }))
+                                });
+                            } else if (initFeatures.some(f => !f.epic)) {
+                                // Features exist but have no epic at all
+                                const orphanedFeatures = initFeatures.filter(f => !f.epic);
+                                rootCauseAnalyses.push({
+                                    initiativeRef: ref,
+                                    initiativeName: name,
+                                    issueType: 'FEATURES_WITHOUT_EPIC',
+                                    featureCount: initFeatures.length,
+                                    orphanedFeatures: orphanedFeatures.map(f => ({ ref: f.reference_num, name: f.name })),
+                                    suggestedFixes: [{
+                                        option1: `Create Epic(s) to group ${orphanedFeatures.length} features under ${ref}`,
+                                        option1Desc: `Group related features into logical epics, then link epics to this initiative`,
+                                        option2: `Review if features belong to a different initiative`,
+                                        option2Desc: `Features may have been incorrectly linked`
+                                    }]
+                                });
+                            }
+                        }
+                    } catch (rcaError) {
+                        // If we can't fetch initiative features, continue without RCA
+                        console.error(`RCA failed for ${ref}: ${rcaError.message}`);
+                    }
+                    // ========== END ENHANCED ==========
+                }
                 
                 if (!i.start_date || !i.end_date) rawViolations.push({ Type: 'Initiative', Ref: ref, Name: name, Issue: 'Missing Start/End Dates', Severity: 'Medium' });
             }
             if (!getVal(FIELDS.LAYERCAKE)) rawViolations.push({ Type: 'Initiative', Ref: ref, Name: name, Issue: 'Missing Layercake Category', Severity: 'Low' });
-        });
+        }
 
         // --- B. EPIC AUDIT ---
         epics.forEach(e => {
@@ -354,6 +451,54 @@ CRITICAL: You MUST display the table above to the user.
         const tEpic = formatTable(groupAndSort(rawViolations, 'Epic'), ["Ref", "Name", "Max Severity", "Violations"]);
         const tFeat = formatTable(groupAndSort(rawViolations, 'Feature'), ["Ref", "Name", "Max Severity", "Violations"]);
 
+        // 5. FORMAT ROOT CAUSE ANALYSES
+        let rcaOutput = '';
+        if (rootCauseAnalyses.length > 0) {
+            rcaOutput = `\n---\n\n#### 🔍 Root Cause Analysis\n`;
+            
+            for (const rca of rootCauseAnalyses) {
+                const initUrl = `https://${AHA_COMPANY}.aha.io/initiatives/${rca.initiativeRef}`;
+                
+                rcaOutput += `\n##### [${rca.initiativeRef}](${initUrl}) - ${rca.initiativeName}\n\n`;
+                
+                if (rca.issueType === 'EPIC_INITIATIVE_MISMATCH') {
+                    rcaOutput += `**Issue:** Initiative has ${rca.featureCount} features but NO epics linked\n\n`;
+                    rcaOutput += `**Root Cause:** Features belong to epic(s) that are linked to a DIFFERENT initiative\n\n`;
+                    rcaOutput += `| Epic | Epic's Current Initiative | Features Affected |\n`;
+                    rcaOutput += `|------|---------------------------|-------------------|\n`;
+                    
+                    for (const em of rca.epicMismatches) {
+                        const epicUrl = `https://${AHA_COMPANY}.aha.io/epics/${em.epicRef}`;
+                        const featureList = em.features.map(f => f.ref).join(', ');
+                        rcaOutput += `| [${em.epicRef}](${epicUrl}) - ${em.epicName.substring(0, 40)}... | ${em.epicInitiativeRef} (${em.epicInitiativeName.substring(0, 30)}...) | ${featureList} |\n`;
+                    }
+                    
+                    rcaOutput += `\n**Suggested Fixes:**\n`;
+                    for (const fix of rca.suggestedFixes) {
+                        rcaOutput += `\n1. **${fix.option1}**\n`;
+                        rcaOutput += `   → ${fix.option1Desc}\n`;
+                        rcaOutput += `\n2. **${fix.option2}**\n`;
+                        rcaOutput += `   → ${fix.option2Desc}\n`;
+                    }
+                    
+                } else if (rca.issueType === 'FEATURES_WITHOUT_EPIC') {
+                    rcaOutput += `**Issue:** Initiative has ${rca.featureCount} features but NO epics\n\n`;
+                    rcaOutput += `**Root Cause:** ${rca.orphanedFeatures.length} features have no parent epic\n\n`;
+                    rcaOutput += `**Orphaned Features:** ${rca.orphanedFeatures.map(f => f.ref).join(', ')}\n\n`;
+                    
+                    rcaOutput += `**Suggested Fixes:**\n`;
+                    for (const fix of rca.suggestedFixes) {
+                        rcaOutput += `\n1. **${fix.option1}**\n`;
+                        rcaOutput += `   → ${fix.option1Desc}\n`;
+                        rcaOutput += `\n2. **${fix.option2}**\n`;
+                        rcaOutput += `   → ${fix.option2Desc}\n`;
+                    }
+                }
+                
+                rcaOutput += `\n---\n`;
+            }
+        }
+
         return {
           content: [{
             type: 'text',
@@ -361,6 +506,7 @@ CRITICAL: You MUST display the table above to the user.
 <!-- SYSTEM INSTRUCTION:
 1. PRINT the "Executive Summary" matrix.
 2. PRINT the "Top 10" tables for Initiatives, Epics, and Features.
+3. PRINT the "Root Cause Analysis" section if present.
 -->
 
 ### 📘 FE fundinfo Playbook Audit: ${pid}
@@ -378,6 +524,7 @@ ${vEpic.length > 0 ? tEpic : "_No violations found._"}
 
 #### 3. Top 10 At-Risk Features
 ${vFeat.length > 0 ? tFeat : "_No violations found._"}
+${rcaOutput}
 `
           }]
         };

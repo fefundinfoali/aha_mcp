@@ -142,6 +142,10 @@ export class AhaClient {
     return this.request('GET', `/initiatives/${initiativeId}`);
   }
 
+  async getInitiativeFeatures(initiativeId) {
+    return this.request('GET', `/initiatives/${initiativeId}/features`);
+  }
+
   async createInitiative(productId, data) {
     return this.request('POST', `/products/${productId}/initiatives`, { initiative: data });
   }
