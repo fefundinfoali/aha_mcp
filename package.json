@@ -1,15 +1,13 @@
 {
-  "name": "aha-mcp-custom",
-  "version": "1.1.0",
-  "description": "Custom Aha MCP server with full CRUD capabilities and SSE support",
+  "name": "aha-mcp-remote",
+  "version": "1.2.0",
+  "description": "Remote Aha MCP server with HTTP Streamable Transport for Claude Desktop and mcp-remote",
   "main": "src/index.js",
   "type": "module",
-  "bin": {
-    "aha-mcp-custom": "./src/index.js"
-  },
   "scripts": {
     "start": "node src/index.js",
-    "dev": "TRANSPORT=stdio node src/index.js"
+    "start:http": "TRANSPORT=http node src/index.js",
+    "start:stdio": "TRANSPORT=stdio node src/index.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
@@ -19,5 +17,11 @@
     "node": ">=18.0.0"
   },
   "author": "fe-fundinfo",
-  "license": "MIT"
+  "license": "MIT",
+  "keywords": [
+    "mcp",
+    "claude",
+    "aha",
+    "model-context-protocol"
+  ]
 }
