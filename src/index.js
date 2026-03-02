@@ -173,6 +173,7 @@ const TOOLS = [
 // HANDLE TOOL CALLS
 // ==========================================
 async function handleToolCall(name, args, ahaClient) {
+  const userToken = ahaClient.token;
   try {
     switch (name) {
       // ============ WORKFLOW TOOLS ============
