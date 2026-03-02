@@ -80,19 +80,19 @@ export class AhaClient {
     
     // Handle epic linking
     if (result.epic_id) {
-      result.epic = { id: result.epic_id };
+      result.epic = { reference_num: result.epic_id };
       delete result.epic_id;
     }
     
     // Handle initiative linking
     if (result.initiative_id) {
-      result.initiative = { id: result.initiative_id };
+      result.initiative = { reference_num: result.initiative_id };
       delete result.initiative_id;
     }
     
     // Handle release linking
     if (result.release_id) {
-      result.release = { id: result.release_id };
+      result.release = { reference_num: result.release_id };
       delete result.release_id;
     }
     
@@ -225,7 +225,7 @@ export class AhaClient {
     
     // Handle goal linking
     if (result.goal_id) {
-      result.goals = [{ id: result.goal_id }];
+      result.goals = [{ reference_num: result.goal_id }];
       delete result.goal_id;
     }
     
@@ -271,7 +271,7 @@ export class AhaClient {
     const epicData = { ...data };
     // Transform initiative_id to initiative for Aha API
     if (epicData.initiative_id) {
-      epicData.initiative = { id: epicData.initiative_id };
+      epicData.initiative = { reference_num: epicData.initiative_id };
       delete epicData.initiative_id;
     }
     // Remove product_id from the payload
@@ -283,7 +283,7 @@ export class AhaClient {
     // Transform initiative_id to initiative for Aha API
     const epicData = { ...data };
     if (epicData.initiative_id) {
-      epicData.initiative = { id: epicData.initiative_id };
+      epicData.initiative = { reference_num: epicData.initiative_id };
       delete epicData.initiative_id;
     }
     // Remove epic_id from the payload
