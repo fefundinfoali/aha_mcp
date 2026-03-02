@@ -31,10 +31,7 @@ console.error(`Audit log location: ${auditLogger.getLogFilePath()}`);
 // HELPER FUNCTIONS
 // ==========================================
 
-function resolveProductId(argId) {
-  if (argId) return argId;
-  const saved = preferences.get('default_product_id');
-  if (saved) return saved;
+function resolveProductId(argId) { if (argId) return argId; const saved = preferences.get('default_product_id'); if (saved) return saved; const envDefault = process.env.DEFAULT_PRODUCT_ID; if (envDefault) return envDefault;
   throw new Error("No Product ID provided and no default set. Please ask me to 'Run the onboarding wizard' first.");
 }
 
@@ -1694,3 +1691,4 @@ async function main() {
 }
 
 main().catch(console.error);
+
