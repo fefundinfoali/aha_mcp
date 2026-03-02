@@ -269,9 +269,9 @@ export class AhaClient {
 
   async createEpic(productId, data) {
     const epicData = { ...data };
-    // Transform initiative_id to initiative for Aha API
+    // Transform initiative_id to initiative for Aha API (bare string format)
     if (epicData.initiative_id) {
-      epicData.initiative = { reference_num: epicData.initiative_id };
+      epicData.initiative = epicData.initiative_id;
       delete epicData.initiative_id;
     }
     // Remove product_id from the payload
@@ -280,10 +280,10 @@ export class AhaClient {
   }
 
   async updateEpic(epicId, data) {
-    // Transform initiative_id to initiative for Aha API
+    // Transform initiative_id to initiative for Aha API (bare string format)
     const epicData = { ...data };
     if (epicData.initiative_id) {
-      epicData.initiative = { reference_num: epicData.initiative_id };
+      epicData.initiative = epicData.initiative_id;
       delete epicData.initiative_id;
     }
     // Remove epic_id from the payload
