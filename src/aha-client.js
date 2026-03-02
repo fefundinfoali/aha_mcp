@@ -351,6 +351,57 @@ export class AhaClient {
     return this.request('GET', `/products/${productId}/workflow_statuses`);
   }
 
+  // ============ ENRICHED GET METHODS ============
+  // These fetch the parent record + nested children in parallel
+
+  async getFeatureEnriched(featureId) {
+    const [featureRes, reqRes] = await Promise.all([
+      this.request('GET', `/features/${featureId}`),
+      this.request('GET', `/features/${featureId}/requirements`).catch(() => ({ requirements: [] }))
+    ]);
+    const feature = featureRes.feature;
+    if (feature) {
+      feature._requirements = reqRes.requirements || [];
+    }
+    return featureRes;
+  }
+
+  async getEpicEnriched(epicId) {
+    const [epicRes, featRes] = await Promise.all([
+      this.request('GET', `/epics/${epicId}`),
+      this.request('GET', `/epics/${epicId}/features`).catch(() => ({ features: [] }))
+    ]);
+    const epic = epicRes.epic;
+    if (epic) {
+      epic._features = featRes.features || [];
+    }
+    return epicRes;
+  }
+
+  async getInitiativeEnriched(initiativeId) {
+    const [initRes, featRes] = await Promise.all([
+      this.request('GET', `/initiatives/${initiativeId}`),
+      this.request('GET', `/initiatives/${initiativeId}/features`).catch(() => ({ features: [] }))
+    ]);
+    const initiative = initRes.initiative;
+    if (initiative) {
+      initiative._features = featRes.features || [];
+      // Derive unique epics from feature.epic references
+      const epicMap = {};
+      for (const f of initiative._features) {
+        if (f.epic && f.epic.id && !epicMap[f.epic.id]) {
+          epicMap[f.epic.id] = {
+            id: f.epic.id,
+            reference_num: f.epic.reference_num,
+            name: f.epic.name
+          };
+        }
+      }
+      initiative._epics = Object.values(epicMap);
+    }
+    return initRes;
+  }
+
   // ============ TAGS ============
   async listTags(productId) {
     return this.request('GET', `/products/${productId}/tags`);
