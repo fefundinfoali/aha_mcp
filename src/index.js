@@ -31,7 +31,7 @@ console.error(`Audit log location: ${auditLogger.getLogFilePath()}`);
 // HELPER FUNCTIONS
 // ==========================================
 
-function resolveProductId(argId) { if (argId) return argId; const saved = preferences.get('default_product_id'); if (saved) return saved; const envDefault = process.env.DEFAULT_PRODUCT_ID; if (envDefault) return envDefault;
+function resolveProductId(argId, token) { if (argId) return argId; const saved = preferences.get('default_product_id', token); if (saved) return saved; const envDefault = process.env.DEFAULT_PRODUCT_ID; if (envDefault) return envDefault;
   throw new Error("No Product ID provided and no default set. Please ask me to 'Run the onboarding wizard' first.");
 }
 
@@ -207,7 +207,7 @@ CRITICAL: You MUST display the table above to the user.
       }
 
       case 'run_health_audit': {
-        const pid = resolveProductId(args.product_id);
+        const pid = resolveProductId(args.product_id, userToken);
         const stage = args.stage || "current stage";
         
         // 1. FETCH DATA
@@ -572,11 +572,11 @@ ${args.context}
 
       // ============ STANDARD TOOLS ============
       case 'set_product_context': {
-        const success = preferences.set('default_product_id', args.product_id);
+        const success = preferences.set('default_product_id', args.product_id, userToken);
         return { content: [{ type: 'text', text: success ? `✅ Default product set to: **${args.product_id}**` : `❌ Failed to save preference.` }] };
       }
       case 'get_product_context': {
-        const current = preferences.get('default_product_id');
+        const current = preferences.get('default_product_id', userToken);
         return { content: [{ type: 'text', text: current ? `Current default product: **${current}**` : "No default product set." }] };
       }
 
@@ -592,14 +592,14 @@ ${args.context}
         return { content: [{ type: 'text', text: formatTable(data, ["Name", "Slug", "Type", "Parent"]) }] };
       }
       case 'get_product': {
-        const response = await ahaClient.getProduct(resolveProductId(args.product_id));
+        const response = await ahaClient.getProduct(resolveProductId(args.product_id, userToken));
         const p = response.product;
         if (!p) return { content: [{ type: 'text', text: "Product not found." }] };
         return { content: [{ type: 'text', text: formatCard(p.name, { Slug: p.reference_prefix, ID: p.id, Type: p.product_line ? "Folder" : "Product" }) }] };
       }
 
       case 'list_features': {
-        const response = await ahaClient.listFeatures(resolveProductId(args.product_id), args.page, args.per_page);
+        const response = await ahaClient.listFeatures(resolveProductId(args.product_id, userToken), args.page, args.per_page);
         if (!response.features) return { content: [{ type: 'text', text: "No features found." }] };
         const data = response.features.map(f => ({
           Ref: f.reference_num,
@@ -616,7 +616,7 @@ ${args.context}
         return { content: [{ type: 'text', text: formatCard(f.name, { Ref: f.reference_num, Status: f.workflow_status?.name, Release: f.release?.name, URL: f.url }) }] };
       }
       case 'search_features': {
-        const response = await ahaClient.searchFeatures(resolveProductId(args.product_id), args.query);
+        const response = await ahaClient.searchFeatures(resolveProductId(args.product_id, userToken), args.query);
         if (!response.features) return { content: [{ type: 'text', text: "No matches found." }] };
         const data = response.features.map(f => ({
           Ref: f.reference_num,
@@ -627,7 +627,7 @@ ${args.context}
       }
 
       case 'list_ideas': {
-        const response = await ahaClient.listIdeas(resolveProductId(args.product_id), args.page, args.per_page);
+        const response = await ahaClient.listIdeas(resolveProductId(args.product_id, userToken), args.page, args.per_page);
         if (!response.ideas) return { content: [{ type: 'text', text: "No ideas found." }] };
         const data = response.ideas.map(i => ({
           Ref: i.reference_num,
@@ -644,7 +644,7 @@ ${args.context}
         return { content: [{ type: 'text', text: formatCard(i.name, { Ref: i.reference_num, Status: i.workflow_status?.name, Votes: i.votes, URL: i.url }) }] };
       }
       case 'search_ideas': {
-        const response = await ahaClient.searchIdeas(resolveProductId(args.product_id), args.query);
+        const response = await ahaClient.searchIdeas(resolveProductId(args.product_id, userToken), args.query);
         if (!response.ideas) return { content: [{ type: 'text', text: "No matches found." }] };
         const data = response.ideas.map(i => ({
           Ref: i.reference_num,
@@ -655,7 +655,7 @@ ${args.context}
       }
 
       case 'list_releases': {
-        const response = await ahaClient.listReleases(resolveProductId(args.product_id));
+        const response = await ahaClient.listReleases(resolveProductId(args.product_id, userToken));
         if (!response.releases) return { content: [{ type: 'text', text: "No releases found." }] };
         const data = response.releases.map(r => ({
           Ref: r.reference_num,
@@ -673,7 +673,7 @@ ${args.context}
       }
 
       case 'list_epics': {
-        const response = await ahaClient.listEpics(resolveProductId(args.product_id), args.page, args.per_page);
+        const response = await ahaClient.listEpics(resolveProductId(args.product_id, userToken), args.page, args.per_page);
         if (!response.epics) return { content: [{ type: 'text', text: "No epics found." }] };
         const data = response.epics.map(e => ({
           Ref: e.reference_num,
@@ -691,7 +691,7 @@ ${args.context}
       }
 
       case 'list_initiatives': {
-        const response = await ahaClient.listInitiatives(resolveProductId(args.product_id));
+        const response = await ahaClient.listInitiatives(resolveProductId(args.product_id, userToken));
         if (!response.initiatives) return { content: [{ type: 'text', text: "No initiatives found." }] };
         const data = response.initiatives.map(i => ({
           Ref: i.reference_num,
@@ -709,7 +709,7 @@ ${args.context}
       }
 
       case 'list_goals': {
-        const response = await ahaClient.listGoals(resolveProductId(args.product_id));
+        const response = await ahaClient.listGoals(resolveProductId(args.product_id, userToken));
         if (!response.goals) return { content: [{ type: 'text', text: "No goals found." }] };
         const data = response.goals.map(g => ({
           Ref: g.reference_num,
@@ -771,7 +771,7 @@ ${args.context}
       }
 
       case 'get_workflow_statuses': {
-        const response = await ahaClient.getWorkflowStatuses(resolveProductId(args.product_id));
+        const response = await ahaClient.getWorkflowStatuses(resolveProductId(args.product_id, userToken));
         if (!response.workflow_statuses) return { content: [{ type: 'text', text: "No statuses found." }] };
         const data = response.workflow_statuses.map(w => ({
           Name: w.name,
@@ -781,7 +781,7 @@ ${args.context}
         return { content: [{ type: 'text', text: formatTable(data, ["Name", "Color", "Complete"]) }] };
       }
       case 'list_tags': {
-        const response = await ahaClient.listTags(resolveProductId(args.product_id));
+        const response = await ahaClient.listTags(resolveProductId(args.product_id, userToken));
         if (!response.tags) return { content: [{ type: 'text', text: "No tags found." }] };
         const data = response.tags.map(t => ({ Name: t.name }));
         return { content: [{ type: 'text', text: formatTable(data, ["Name"]) }] };
@@ -789,7 +789,7 @@ ${args.context}
 
       // CREATE / UPDATE / DELETE
       case 'create_feature': {
-        const pid = resolveProductId(args.product_id);
+        const pid = resolveProductId(args.product_id, userToken);
         const result = await ahaClient.createFeature(pid, args);
         await auditLogger.logCreate('feature', result?.feature?.reference_num, args.name, pid, args, result);
         return { content: [{ type: 'text', text: `✅ **Created Feature:** ${result?.feature?.reference_num} - ${result?.feature?.name}` }] };
@@ -808,7 +808,7 @@ ${args.context}
       // ========== CREATE OPERATIONS (WITH PROPER RESPONSES & AUDIT) ==========
       case 'create_epic': {
         try {
-          const pid = resolveProductId(args.product_id);
+          const pid = resolveProductId(args.product_id, userToken);
           const result = await ahaClient.createEpic(pid, args);
           const ref = result?.epic?.reference_num;
           const name = result?.epic?.name || args.name;
@@ -835,7 +835,7 @@ ${args.context}
 
       case 'create_idea': {
         try {
-          const pid = resolveProductId(args.product_id);
+          const pid = resolveProductId(args.product_id, userToken);
           const result = await ahaClient.createIdea(pid, args);
           const ref = result?.idea?.reference_num;
           const name = result?.idea?.name || args.name;
@@ -862,7 +862,7 @@ ${args.context}
 
       case 'create_release': {
         try {
-          const pid = resolveProductId(args.product_id);
+          const pid = resolveProductId(args.product_id, userToken);
           const result = await ahaClient.createRelease(pid, args);
           const ref = result?.release?.reference_num;
           const name = result?.release?.name || args.name;
@@ -889,7 +889,7 @@ ${args.context}
 
       case 'create_initiative': {
         try {
-          const pid = resolveProductId(args.product_id);
+          const pid = resolveProductId(args.product_id, userToken);
           const result = await ahaClient.createInitiative(pid, args);
           const ref = result?.initiative?.reference_num;
           const name = result?.initiative?.name || args.name;
@@ -916,7 +916,7 @@ ${args.context}
 
       case 'create_goal': {
         try {
-          const pid = resolveProductId(args.product_id);
+          const pid = resolveProductId(args.product_id, userToken);
           const result = await ahaClient.createGoal(pid, args);
           const ref = result?.goal?.reference_num;
           const name = result?.goal?.name || args.name;

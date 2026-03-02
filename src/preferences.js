@@ -1,37 +1,32 @@
-import fs from 'fs';
-import path from 'path';
-import os from 'os';
+import crypto from 'crypto';
 
-// Store prefs in the same folder as the audit log
-const PREFS_DIR = process.env.AUDIT_LOG_PATH || path.join(os.homedir(), '.aha-mcp-audit');
-const PREFS_FILE = path.join(PREFS_DIR, 'prefs.json');
+// In-memory per-user preferences
+// Keyed by a hash of the user's AHA token so each person gets their own defaults
+const userPrefs = new Map();
 
-// Ensure directory exists
-if (!fs.existsSync(PREFS_DIR)) {
-  fs.mkdirSync(PREFS_DIR, { recursive: true });
+function userKey(token) {
+  if (!token) return '__global__';
+  return crypto.createHash('sha256').update(token).digest('hex').substring(0, 16);
 }
 
 export const preferences = {
-  set: (key, value) => {
+  set: (key, value, token) => {
     try {
-      let data = {};
-      if (fs.existsSync(PREFS_FILE)) {
-        data = JSON.parse(fs.readFileSync(PREFS_FILE, 'utf8'));
-      }
-      data[key] = value;
-      fs.writeFileSync(PREFS_FILE, JSON.stringify(data, null, 2));
+      const uid = userKey(token);
+      if (!userPrefs.has(uid)) userPrefs.set(uid, {});
+      userPrefs.get(uid)[key] = value;
       return true;
     } catch (e) {
-      console.error("Error saving preference:", e);
+      console.error('Error saving preference:', e);
       return false;
     }
   },
 
-  get: (key) => {
+  get: (key, token) => {
     try {
-      if (fs.existsSync(PREFS_FILE)) {
-        const data = JSON.parse(fs.readFileSync(PREFS_FILE, 'utf8'));
-        return data[key];
+      const uid = userKey(token);
+      if (userPrefs.has(uid)) {
+        return userPrefs.get(uid)[key] || null;
       }
       return null;
     } catch (e) {
